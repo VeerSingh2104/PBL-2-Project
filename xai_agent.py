@@ -196,7 +196,6 @@ def evaluate_attributions(model: TrainedModel, instance: pd.DataFrame, attributi
         for count in range(1, len(names) + 1):
             chosen = [names[i] for i in order[:count]]
             changed = instance.copy()
-            changed.loc[:, chosen] = model.X_train[chosen].median(numeric_only=True).reindex(chosen).fillna(0).to_dict() if all(pd.api.types.is_numeric_dtype(model.X_train[c]) for c in chosen) else changed[chosen]
             # Replace individual features with representative training values.
             for c in chosen:
                 if not pd.api.types.is_numeric_dtype(model.X_train[c]):
