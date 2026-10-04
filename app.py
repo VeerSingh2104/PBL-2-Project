@@ -53,7 +53,7 @@ st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#ee
 page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","SHAP Explainer","LIME Explainer","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
 st.sidebar.divider()
 st.sidebar.markdown('<span class="pill">PHASE 1</span><span class="pill">UI + FORMULAS</span>',unsafe_allow_html=True)
-st.sidebar.caption("Only the baseline Random Forest + SHAP experiment is enabled; broader evaluation remains future work.")
+st.sidebar.caption("Baseline Random Forest experiments with SHAP and LIME are enabled; stability, robustness and broader benchmarking remain future work.")
 
 def hero(kicker,title,desc):
  st.markdown(f'<div class="hero"><div class="eyebrow">{kicker}</div><h1>{title}</h1><p>{desc}</p><span class="pill">PROTOTYPE & METHODOLOGY</span><span class="pill">INTERACTIVE PROTOTYPE</span></div>',unsafe_allow_html=True)
@@ -71,7 +71,7 @@ if page=="Overview":
    with col: st.markdown(f'<div class="metric-card"><div class="smallcap">STEP {item[0]}</div><h3>{item[1]}</h3><p>{item[2]}</p></div>',unsafe_allow_html=True)
  st.markdown("### What Phase 1 delivers")
  st.markdown("- Interactive frontend and dataset profiling for the two report datasets and user-uploaded CSV files.\n- Explainer applicability guidance based on the selected profile.\n- Feature definitions and a metric-by-metric formula reference.\n- Transparent, configurable score demonstration using illustrative values only.\n- Architecture and clear boundary between implemented interface and future model-backed evaluation.")
- st.warning("The SHAP page trains a baseline model and calculates limited results for uploaded data. Other example scores remain illustrative, not experimental results.")
+ st.warning("SHAP and LIME pages train baseline models and calculate selected metrics for uploaded data. The weighted score demo remains illustrative, not an experimental result.")
 elif page=="Dataset Profiler":
  hero("Input & configuration module","Dataset profiler","Inspect feature schema, data types, missingness and basic distributions without fitting a predictive model.")
  choice=st.selectbox("Reference dataset",list(DATASETS)+["Upload your own CSV"])
@@ -157,7 +157,7 @@ elif page=="Preprocessing Lab":
   st.download_button("Download preprocessing audit (JSON)",__import__("json").dumps(audit,indent=2,default=str).encode("utf-8"),"preprocessing_audit.json","application/json")
   st.markdown("### Processing sequence")
   st.markdown("1. Validate tabular input and selected target.\n2. Optionally remove exact duplicate rows and drop rows with missing target values.\n3. Split into training and test partitions.\n4. Fit numeric imputation/scaling and categorical imputation/one-hot encoding on training data only.\n5. Apply the fitted transformations to both partitions and export feature matrices.")
-  st.warning("This prepares data; it does not train a model. For a final experiment, review domain-specific cleaning, outliers, target semantics and split strategy with your supervisor. Fit transformations only on training data to avoid leakage.")
+  st.warning("This prepares data for the model-backed SHAP and LIME experiment pages; it does not train a model in the preprocessing step. For a final experiment, review domain-specific cleaning, outliers, target semantics and split strategy with your supervisor. Fit transformations only on training data to avoid leakage.")
 elif page=="SHAP Explainer":
  hero("Model-backed explanation module","SHAP explainer","Train a baseline Random Forest on the preprocessed training split and generate real SHAP feature attributions for held-out records.")
  st.markdown("### Experiment input")
@@ -300,7 +300,7 @@ elif page=="Explainer Selector":
  st.caption("Candidate routing is a Phase 1 rule-based illustration. Exact compatibility depends on input representation, library support, model interface and implementation testing.")
  st.markdown("### Profile summary"); st.json({"modality":modality,"model_family":model,"gradients_available":diff,"internals_accessible":internals,"explanation_requirements":need,"candidate_explainers":[x[0] for x in candidate],"model_loaded":False})
 elif page=="System Blueprint":
- hero("Architecture & scope","System blueprint","A staged plan aligned with the report's proposed evaluation pipeline.")
+ hero("Architecture & scope","System blueprint","A staged plan aligned with the report's proposed evaluation pipeline, including the implemented SHAP and LIME baseline experiments.")
  modules=[("01","Input & configuration","Dataset, model metadata, task and application context","Structured configuration"),("02","Model/dataset profiler","Data modality, task, model family, differentiability and prediction interface","Profile dictionary"),("03","Explainer selection","Rule-based compatibility and explanation requirements","Candidate explainer list"),("04","Explanation generation","Candidate explainer + same model + relevant inputs","Attribution, rule or heatmap"),("05","Evaluation engine","Explanation outputs and standardized protocol","Metric results per explainer"),("06","Normalization & aggregation","Raw metrics, metric direction and weights","Normalized score / XAIScore"),("07","Ranking","Scores with individual metric values","Ranked candidate table"),("08","Recommendation & report","Ranking, constraints and metric evidence","Recommendation with reasoning and report")]
  for n,title,inp,out in modules:
   i=int(n); status="PHASE 1 UI" if i in [1,2,3,6,7,8] else "FUTURE INTEGRATION"
