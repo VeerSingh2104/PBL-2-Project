@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from preprocessing import prepare_tabular_data
 
 st.set_page_config(page_title="XAIEvalAgent | Phase 1", page_icon="◈", layout="wide", initial_sidebar_state="expanded")
 
@@ -47,7 +48,7 @@ METRICS=[
 {"name":"Runtime","dimension":"Computational cost","direction":"Lower is better","range":"0 and upward (seconds)","formula":"Runtime = (1 / M) Σⱼ₌₁ᴹ (tⱼ_end − tⱼ_start)","meaning":"Measures the average elapsed time to generate an explanation across M explained instances, using a consistent timing protocol.","caveat":"Record hardware, software, warm-up, sample count and whether preprocessing is included."}
 ]
 st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#eef3ff;margin:4px 0 0">Phase 1</h2><p class="muted">Research prototype · No model execution</p>',unsafe_allow_html=True)
-page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
+page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
 st.sidebar.divider()
 st.sidebar.markdown('<span class="pill">PHASE 1</span><span class="pill">UI + FORMULAS</span>',unsafe_allow_html=True)
 st.sidebar.caption("Model training and live XAI evaluation are intentionally out of scope for this phase.")
@@ -105,6 +106,56 @@ elif page=="Dataset Profiler":
  else: st.info("Reference schema is shown from the PBL report. Upload a local CSV to calculate live missingness, uniqueness and distributions.")
  st.markdown("### Profile extracted by Phase 1")
  st.code(f"modality: tabular\\ndomain: {domain}\\ntask: classification (reference target)\\ntarget: {target}\\nfeature_count: {len(features)}\\nmodel_loaded: false\\nprediction_interface: unavailable",language="yaml")
+elif page=="Preprocessing Lab":
+ hero("Data preparation module","Preprocessing lab","Clean and transform an uploaded tabular dataset, then export train/test feature matrices for a later model-backed phase.")
+ st.markdown("### 1 · Upload and configure")
+ upload=st.file_uploader("Upload dataset (CSV)",type=["csv"],key="prep_upload")
+ if upload is None:
+  st.info("Upload a CSV to begin. Preprocessing is performed on the uploaded data only; the reference dataset schemas remain available in Dataset Profiler.")
+  st.stop()
+ try:
+  raw=pd.read_csv(upload)
+ except Exception as e:
+  st.error(f"Unable to read CSV: {e}"); st.stop()
+ if raw.empty:
+  st.error("The CSV contains no rows."); st.stop()
+ raw.columns=[str(c).strip() for c in raw.columns]
+ if len(set(raw.columns))!=len(raw.columns):
+  st.error("Column names are duplicated after trimming whitespace."); st.stop()
+ target=st.selectbox("Target column",raw.columns.tolist(),key="prep_target")
+ p1,p2,p3=st.columns(3)
+ with p1: test_pct=st.slider("Test split (%)",10,40,20,5)
+ with p2: scaling=st.selectbox("Numeric scaling",["StandardScaler","MinMaxScaler","None"])
+ with p3: dupes=st.checkbox("Remove duplicate rows",value=True)
+ p4,p5=st.columns(2)
+ with p4: num_imp=st.selectbox("Numeric missing values",["median","mean"],help="Imputation is fitted on the training split only.")
+ with p5: cat_imp=st.selectbox("Categorical missing values",["most_frequent","constant"],help="Constant imputation fills missing categories with a dedicated placeholder.")
+ random_seed=st.number_input("Random seed",min_value=0,max_value=99999,value=42,step=1)
+ st.caption("Categorical features are one-hot encoded. The target is retained in its original form and is not scaled or encoded by this feature-preparation step.")
+ if st.button("Run preprocessing",type="primary"):
+  try:
+   train,test,audit=prepare_tabular_data(raw,target,test_pct/100,scaling,num_imp,cat_imp,dupes,int(random_seed))
+   st.session_state["prep_train"]=train
+   st.session_state["prep_test"]=test
+   st.session_state["prep_audit"]=audit
+  except Exception as e:
+   st.session_state.pop("prep_train",None); st.session_state.pop("prep_test",None); st.session_state.pop("prep_audit",None)
+   st.error(f"Preprocessing could not be completed: {e}")
+ if "prep_audit" in st.session_state:
+  audit=st.session_state["prep_audit"]; train=st.session_state["prep_train"]; test=st.session_state["prep_test"]
+  st.markdown("### 2 · Preprocessing audit")
+  a,b,c,d=st.columns(4)
+  a.metric("Rows after cleaning",audit["rows_after_cleaning"]); b.metric("Train rows",audit["train_rows"]); c.metric("Test rows",audit["test_rows"]); d.metric("Output features",audit["output_feature_count"])
+  audit_df=pd.DataFrame([("Duplicate rows found",audit["duplicate_rows_found"]),("Duplicate rows removed",audit["duplicate_rows_removed"]),("Rows missing target removed",audit["rows_missing_target_removed"]),("Numeric columns",len(audit["numeric_columns"])),("Categorical columns",len(audit["categorical_columns"])),("Numeric imputation",audit["numeric_imputation"]),("Categorical imputation",audit["categorical_imputation"]),("Scaling",audit["scaling"]),("Encoding",audit["encoding"])],columns=["Step","Result"])
+  st.dataframe(audit_df,use_container_width=True,hide_index=True)
+  st.markdown("### 3 · Prepared output")
+  t1,t2=st.tabs(["Training split","Test split"])
+  with t1: st.dataframe(train.head(30),use_container_width=True); st.download_button("Download train.csv",train.to_csv(index=False).encode("utf-8"),"train.csv","text/csv")
+  with t2: st.dataframe(test.head(30),use_container_width=True); st.download_button("Download test.csv",test.to_csv(index=False).encode("utf-8"),"test.csv","text/csv")
+  st.download_button("Download preprocessing audit (JSON)",__import__("json").dumps(audit,indent=2,default=str).encode("utf-8"),"preprocessing_audit.json","application/json")
+  st.markdown("### Processing sequence")
+  st.markdown("1. Validate tabular input and selected target.\n2. Optionally remove exact duplicate rows and drop rows with missing target values.\n3. Split into training and test partitions.\n4. Fit numeric imputation/scaling and categorical imputation/one-hot encoding on training data only.\n5. Apply the fitted transformations to both partitions and export feature matrices.")
+  st.warning("This prepares data; it does not train a model. For a final experiment, review domain-specific cleaning, outliers, target semantics and split strategy with your supervisor. Fit transformations only on training data to avoid leakage.")
 elif page=="Metric Lab":
  hero("Evaluation engine · methodology","Metric lab","Explore the six proposed evaluation dimensions, their equations, expected direction and design considerations.")
  st.caption("Formula reference follows the evaluation methodology in the PBL report. Final implementation choices and metric applicability remain subject to validation.")
