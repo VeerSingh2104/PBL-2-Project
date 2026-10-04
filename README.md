@@ -1,6 +1,6 @@
 # XAIEvalAgent — Phase 1
 
-XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, a transparent formula reference, and an interactive tabular preprocessing workflow and a model-backed SHAP experiment page. **No machine-learning model is trained or executed in this phase.**
+XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, a transparent formula reference, and an interactive tabular preprocessing workflow and a model-backed SHAP experiment page. A baseline Random Forest is trained only in the SHAP experiment page; no multi-model or multi-explainer benchmark is yet implemented.
 
 ## Phase 1 capabilities
 - Streamlit workspace with Overview, Dataset Profiler, Metric Lab, Explainer Selector, and System Blueprint sections.
