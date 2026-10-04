@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from preprocessing import prepare_tabular_data
 from shap_explainer import run_shap_experiment
+from lime_explainer import run_lime_experiment
 
 st.set_page_config(page_title="XAIEvalAgent | Phase 1", page_icon="◈", layout="wide", initial_sidebar_state="expanded")
 
@@ -49,7 +50,7 @@ METRICS=[
 {"name":"Runtime","dimension":"Computational cost","direction":"Lower is better","range":"0 and upward (seconds)","formula":"Runtime = (1 / M) Σⱼ₌₁ᴹ (tⱼ_end − tⱼ_start)","meaning":"Measures the average elapsed time to generate an explanation across M explained instances, using a consistent timing protocol.","caveat":"Record hardware, software, warm-up, sample count and whether preprocessing is included."}
 ]
 st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#eef3ff;margin:4px 0 0">Phase 1</h2><p class="muted">Research prototype · SHAP baseline enabled</p>',unsafe_allow_html=True)
-page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","SHAP Explainer","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
+page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","SHAP Explainer","LIME Explainer","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
 st.sidebar.divider()
 st.sidebar.markdown('<span class="pill">PHASE 1</span><span class="pill">UI + FORMULAS</span>',unsafe_allow_html=True)
 st.sidebar.caption("Only the baseline Random Forest + SHAP experiment is enabled; broader evaluation remains future work.")
@@ -199,6 +200,37 @@ elif page=="SHAP Explainer":
   st.download_button("Download SHAP results (JSON)",__import__("json").dumps(export,indent=2,default=str).encode("utf-8"),"shap_results.json","application/json")
   st.download_button("Download local SHAP values (CSV)",result["local"].to_csv(index=False).encode("utf-8"),"shap_local_values.csv","text/csv")
   st.warning("This is a baseline experiment, not a clinically or financially validated model. Review target meaning, class balance, preprocessing and model settings before interpreting results. The score does not establish causal influence or a universally best explainer.")
+elif page=="LIME Explainer":
+ hero("Model-backed explanation module","LIME explainer","Generate local surrogate explanations with LIME using the same prepared train/test split and baseline model configuration.")
+ if "prep_audit" not in st.session_state:
+  st.info("First upload a CSV and run the Preprocessing Lab.")
+  st.stop()
+ audit=st.session_state["prep_audit"]; train=st.session_state["prep_train"]; test=st.session_state["prep_test"]; target=audit["target"]
+ a,b=st.columns(2); a.metric("Training rows",len(train)); b.metric("Test rows",len(test))
+ st.caption("LIME fits a local interpretable surrogate around each held-out instance. The Random Forest is trained on the training split only.")
+ explain_count=st.slider("Held-out instances to explain",1,min(50,len(test)),min(10,len(test)),key="lime_count")
+ if st.button("Train model and generate LIME explanations",type="primary"):
+  try:
+   with st.spinner("Training Random Forest and calculating LIME explanations..."):
+    result=run_lime_experiment(train,test,target,explain_count,42)
+   st.session_state["lime_result"]=result; st.session_state["lime_target"]=target
+  except Exception as e:
+   st.session_state.pop("lime_result",None); st.error(f"LIME experiment failed: {e}")
+ if "lime_result" in st.session_state and st.session_state.get("lime_target")==target:
+  result=st.session_state["lime_result"]
+  a,b,c=st.columns(3); a.metric("Explained instances",result["explained_count"])
+  b.metric("Faithfulness correlation",f'{result["faithfulness_correlation"]:.4f}' if np.isfinite(result["faithfulness_correlation"]) else "N/A")
+  c.metric("LIME runtime",f'{result["runtime_seconds"]:.4f} s')
+  st.caption("Faithfulness is an approximate perturbation-based estimate averaged over explained instances. Runtime includes local explanation generation and varies by hardware.")
+  st.markdown("### Global feature importance")
+  st.bar_chart(result["global_importance"].head(15).set_index("feature")["mean_abs_lime"])
+  st.dataframe(result["global_importance"],use_container_width=True,hide_index=True)
+  instance=st.selectbox("Explained test instance",list(range(1,result["explained_count"]+1)),format_func=lambda n:f"Test instance {n}",key="lime_instance")
+  local=result["local"][result["local"]["instance"]==instance].sort_values("abs_lime",ascending=False)
+  st.caption(f'Predicted class: {local["predicted_class"].iloc[0]} · Predicted probability: {local["predicted_probability"].iloc[0]:.4f}')
+  st.bar_chart(local.head(15).set_index("feature")["lime_value"])
+  st.dataframe(local[["feature","feature_value","lime_value","abs_lime"]],use_container_width=True,hide_index=True)
+  st.download_button("Download LIME local values (CSV)",result["local"].to_csv(index=False).encode("utf-8"),"lime_local_values.csv","text/csv")
 elif page=="Metric Lab":
  hero("Evaluation engine · methodology","Metric lab","Explore proposed evaluation dimensions and review the metrics now calculated by the SHAP experiment.")
  st.caption("Formula reference follows the evaluation methodology in the PBL report. Final implementation choices and metric applicability remain subject to validation.")
@@ -206,6 +238,22 @@ elif page=="Metric Lab":
   cols=st.columns(2)
   for col,m in zip(cols,METRICS[ix:ix+2]):
    with col: metric_card(m)
+ st.markdown("### Calculated explainer comparison")
+ if "shap_result" in st.session_state and "lime_result" in st.session_state and st.session_state.get("shap_target")==st.session_state.get("lime_target"):
+  sr=st.session_state["shap_result"]; lr=st.session_state["lime_result"]
+  from scipy.stats import kendalltau
+  sg=sr["global_importance"].set_index("feature")["mean_abs_shap"]
+  lg=lr["global_importance"].set_index("feature")["mean_abs_lime"]
+  common=sg.index.intersection(lg.index)
+  tau=kendalltau(sg.loc[common].rank(ascending=False),lg.loc[common].rank(ascending=False)).statistic if len(common)>1 else float("nan")
+  comparison=pd.DataFrame([
+   {"Explainer":"SHAP","Fidelity":sr["faithfulness_correlation"],"Stability":"Not measured","Robustness":"Not measured","Consistency":tau,"Runtime (s)":sr["runtime_seconds"]},
+   {"Explainer":"LIME","Fidelity":lr["faithfulness_correlation"],"Stability":"Not measured","Robustness":"Not measured","Consistency":tau,"Runtime (s)":lr["runtime_seconds"]},
+  ])
+  st.dataframe(comparison,use_container_width=True,hide_index=True)
+  st.caption(f"Calculated on the same uploaded dataset and prepared split. Cross-explainer consistency is Kendall's tau over {len(common)} aligned features; the same pairwise agreement value is shown for both explainers. Stability and robustness remain unimplemented. Run both explainer pages for current results.")
+ else:
+  st.info("Run both the SHAP Explainer and LIME Explainer on the same prepared dataset to populate the calculated comparison table.")
  st.markdown("### Proposed normalization")
  st.markdown("Metrics use different scales, so raw values should not be added directly. The report proposes min–max normalization within the candidate set, with direction correction so larger normalized values always indicate better performance.")
  st.latex(r"\displaystyle z_{e,k}=\frac{r_{e,k}-\min(r_{:,k})}{\max(r_{:,k})-\min(r_{:,k})}")
