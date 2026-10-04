@@ -216,7 +216,7 @@ elif page=="Metric Lab":
  st.caption("The report suggests equal weights by default and application-specific weighting as an option. Always show raw metrics alongside the aggregate score.")
  st.markdown("### Interactive score demonstration")
  st.warning("The table below remains a clearly labelled illustrative comparison. For calculated SHAP results, run the SHAP Explainer page on an uploaded dataset. Only SHAP is implemented as a model-backed explainer in this phase.")
- demo=pd.DataFrame({"Explainer":["SHAP","LIME","Anchors"],"Faithfulness Correlation":[.72,.55,.38],"Max-Sensitivity":[.18,.42,.30],"Local Lipschitz Estimate":[.95,1.60,1.25],"Cross-Explainer Agreement":[.68,.52,.41],"Sparseness (Gini)":[.61,.48,.70],"Runtime (s)":[2.40,.90,3.10]})
+ demo=pd.DataFrame({"Explainer":["SHAP","LIME","Anchors"],"Faithfulness Correlation":[.72,.55,.38],"Max-Sensitivity":[.18,.42,.30],"Local Lipschitz Estimate":[.95,1.60,1.25],"Cross-Explainer Agreement":[.68,.52,.41],"Sparseness (Gini Index)":[.61,.48,.70],"Runtime":[2.40,.90,3.10]})
  st.dataframe(demo,use_container_width=True,hide_index=True); weights={}; cols=st.columns(3)
  for i,m in enumerate(METRICS):
   with cols[i%3]: weights[m["name"]]=st.slider(m["name"],0.0,3.0,1.0,.25,key="demo_"+str(i))
