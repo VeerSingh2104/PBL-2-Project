@@ -48,14 +48,14 @@ METRICS=[
 {"name":"Sparseness (Gini Index)","dimension":"Interpretability proxy","direction":"Higher is better","range":"0 to 1","formula":"Gini(a) = [2 Σᵢ₌₁ⁿ i·|a|_(i)] / [n Σᵢ₌₁ⁿ |a|_(i)] − (n+1)/n","meaning":"Calculates concentration of absolute attributions, where |a|_(i) are sorted in ascending order. A higher Gini value means a smaller number of features dominate the explanation.","caveat":"Compactness is only a proxy for interpretability; it does not establish correctness or human understandability. Define the zero-attribution case as 0."},
 {"name":"Runtime","dimension":"Computational cost","direction":"Lower is better","range":"0 and upward (seconds)","formula":"Runtime = (1 / M) Σⱼ₌₁ᴹ (tⱼ_end − tⱼ_start)","meaning":"Measures the average elapsed time to generate an explanation across M explained instances, using a consistent timing protocol.","caveat":"Record hardware, software, warm-up, sample count and whether preprocessing is included."}
 ]
-st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#eef3ff;margin:4px 0 0">Phase 1</h2><p class="muted">Research prototype · No model execution</p>',unsafe_allow_html=True)
+st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#eef3ff;margin:4px 0 0">Phase 1</h2><p class="muted">Research prototype · SHAP baseline enabled</p>',unsafe_allow_html=True)
 page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","SHAP Explainer","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
 st.sidebar.divider()
 st.sidebar.markdown('<span class="pill">PHASE 1</span><span class="pill">UI + FORMULAS</span>',unsafe_allow_html=True)
-st.sidebar.caption("Model training and live XAI evaluation are intentionally out of scope for this phase.")
+st.sidebar.caption("Only the baseline Random Forest + SHAP experiment is enabled; broader evaluation remains future work.")
 
 def hero(kicker,title,desc):
- st.markdown(f'<div class="hero"><div class="eyebrow">{kicker}</div><h1>{title}</h1><p>{desc}</p><span class="pill">DESIGN & METHODOLOGY</span><span class="pill">INTERACTIVE PROTOTYPE</span></div>',unsafe_allow_html=True)
+ st.markdown(f'<div class="hero"><div class="eyebrow">{kicker}</div><h1>{title}</h1><p>{desc}</p><span class="pill">PROTOTYPE & METHODOLOGY</span><span class="pill">INTERACTIVE PROTOTYPE</span></div>',unsafe_allow_html=True)
 def metric_card(m):
  st.markdown(f'<div class="metric-card"><div class="section-kicker">{m["dimension"]} · {m["direction"]}</div><h3>{m["name"]}</h3><p>{m["meaning"]}</p><div class="formula">{m["formula"]}</div><p style="margin-bottom:0"><b>Range:</b> {m["range"]}<br><span class="muted">{m["caveat"]}</span></p></div>',unsafe_allow_html=True)
 
@@ -70,7 +70,7 @@ if page=="Overview":
    with col: st.markdown(f'<div class="metric-card"><div class="smallcap">STEP {item[0]}</div><h3>{item[1]}</h3><p>{item[2]}</p></div>',unsafe_allow_html=True)
  st.markdown("### What Phase 1 delivers")
  st.markdown("- Interactive frontend and dataset profiling for the two report datasets and user-uploaded CSV files.\n- Explainer applicability guidance based on the selected profile.\n- Feature definitions and a metric-by-metric formula reference.\n- Transparent, configurable score demonstration using illustrative values only.\n- Architecture and clear boundary between implemented interface and future model-backed evaluation.")
- st.warning("No model is trained and no real explanation or metric result is produced in Phase 1. Any example score is labelled illustrative, not an experiment result.")
+ st.warning("The SHAP page trains a baseline model and calculates limited results for uploaded data. Other example scores remain illustrative, not experimental results.")
 elif page=="Dataset Profiler":
  hero("Input & configuration module","Dataset profiler","Inspect feature schema, data types, missingness and basic distributions without fitting a predictive model.")
  choice=st.selectbox("Reference dataset",list(DATASETS)+["Upload your own CSV"])
@@ -263,4 +263,4 @@ elif page=="System Blueprint":
  with right:
   st.markdown("#### Later phases · Not active"); st.markdown("- Load/train models and generate explanations\n- Execute metrics under controlled perturbation protocols\n- Aggregate measurements over test instances\n- Validate metric definitions and applicability\n- Evidence-based recommendation from actual results\n- Persist experiment runs and export full evaluation reports")
  st.info("The report describes the system as a selection, evaluation, comparison and recommendation layer—not a new predictive model. Phase 1 makes the methodology inspectable while keeping model-backed claims for later experimentation.")
-st.markdown("<hr><p class='muted' style='text-align:center'>XAIEvalAgent · PBL-2 · Phase 1 prototype · No model execution or experimental claims</p>",unsafe_allow_html=True)
+st.markdown("<hr><p class='muted' style='text-align:center'>XAIEvalAgent · PBL-2 · Phase 1 prototype · SHAP baseline experiment · limited evaluation</p>",unsafe_allow_html=True)
