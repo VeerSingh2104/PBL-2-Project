@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from preprocessing import prepare_tabular_data
+from shap_explainer import run_shap_experiment
 
 st.set_page_config(page_title="XAIEvalAgent | Phase 1", page_icon="◈", layout="wide", initial_sidebar_state="expanded")
 
@@ -48,7 +49,7 @@ METRICS=[
 {"name":"Runtime","dimension":"Computational cost","direction":"Lower is better","range":"0 and upward (seconds)","formula":"Runtime = (1 / M) Σⱼ₌₁ᴹ (tⱼ_end − tⱼ_start)","meaning":"Measures the average elapsed time to generate an explanation across M explained instances, using a consistent timing protocol.","caveat":"Record hardware, software, warm-up, sample count and whether preprocessing is included."}
 ]
 st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#eef3ff;margin:4px 0 0">Phase 1</h2><p class="muted">Research prototype · No model execution</p>',unsafe_allow_html=True)
-page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
+page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Preprocessing Lab","SHAP Explainer","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
 st.sidebar.divider()
 st.sidebar.markdown('<span class="pill">PHASE 1</span><span class="pill">UI + FORMULAS</span>',unsafe_allow_html=True)
 st.sidebar.caption("Model training and live XAI evaluation are intentionally out of scope for this phase.")
@@ -156,8 +157,50 @@ elif page=="Preprocessing Lab":
   st.markdown("### Processing sequence")
   st.markdown("1. Validate tabular input and selected target.\n2. Optionally remove exact duplicate rows and drop rows with missing target values.\n3. Split into training and test partitions.\n4. Fit numeric imputation/scaling and categorical imputation/one-hot encoding on training data only.\n5. Apply the fitted transformations to both partitions and export feature matrices.")
   st.warning("This prepares data; it does not train a model. For a final experiment, review domain-specific cleaning, outliers, target semantics and split strategy with your supervisor. Fit transformations only on training data to avoid leakage.")
+elif page=="SHAP Explainer":
+ hero("Model-backed explanation module","SHAP explainer","Train a baseline Random Forest on the preprocessed training split and generate real SHAP feature attributions for held-out records.")
+ st.markdown("### Experiment input")
+ if "prep_audit" not in st.session_state:
+  st.info("First upload a CSV and run the Preprocessing Lab. This page uses its training and test outputs.")
+  st.stop()
+ audit=st.session_state["prep_audit"]; train=st.session_state["prep_train"]; test=st.session_state["prep_test"]; target=audit["target"]
+ a,b=st.columns(2)
+ a.metric("Training rows",len(train)); b.metric("Test rows",len(test))
+ st.caption("A Random Forest baseline is trained here for the selected uploaded dataset. The target is not encoded or scaled by the preprocessing step; scikit-learn handles class labels.")
+ explain_count=st.slider("Held-out instances to explain",min_value=1,max_value=min(50,len(test)),value=min(20,len(test)),step=1)
+ if st.button("Train model and generate SHAP values",type="primary"):
+  try:
+   with st.spinner("Training Random Forest and calculating SHAP attributions..."):
+    result=run_shap_experiment(train,test,target,explain_count,42)
+   st.session_state["shap_result"]=result
+   st.session_state["shap_target"]=target
+  except Exception as e:
+   st.session_state.pop("shap_result",None)
+   st.error(f"SHAP experiment failed: {e}")
+ if "shap_result" in st.session_state and st.session_state.get("shap_target")==target:
+  result=st.session_state["shap_result"]
+  st.markdown("### Calculated experiment results")
+  a,b,c,d=st.columns(4)
+  a.metric("Explained instances",result["explained_count"])
+  b.metric("SHAP runtime",f'{result["runtime_seconds"]:.4f} s')
+  c.metric("Faithfulness correlation",f'{result["faithfulness_correlation"]:.4f}' if np.isfinite(result["faithfulness_correlation"]) else "N/A")
+  d.metric("Sparseness (Gini)",f'{result["sparseness_gini"]:.4f}')
+  st.caption("These values are computed from the current uploaded dataset, train/test split, Random Forest and SHAP run. Runtime depends on hardware and configuration. Faithfulness is an approximate perturbation-based estimate for the first explained instance.")
+  st.markdown("### Global feature importance")
+  st.bar_chart(result["global_importance"].head(15).set_index("feature")["mean_abs_shap"])
+  st.dataframe(result["global_importance"],use_container_width=True,hide_index=True)
+  st.markdown("### Local explanation")
+  instance=st.selectbox("Explained test instance",list(range(1,result["explained_count"]+1)),format_func=lambda n:f"Test instance {n}")
+  local=result["local"][result["local"]["instance"]==instance].sort_values("abs_shap",ascending=False)
+  st.caption(f'Predicted class: {local["predicted_class"].iloc[0]} · Predicted probability: {local["predicted_probability"].iloc[0]:.4f}')
+  st.bar_chart(local.head(15).set_index("feature")["shap_value"])
+  st.dataframe(local[["feature","feature_value","shap_value","abs_shap"]],use_container_width=True,hide_index=True)
+  export={k:v for k,v in result.items() if k not in ["model","explainer","local","global_importance"]}
+  st.download_button("Download SHAP results (JSON)",__import__("json").dumps(export,indent=2,default=str).encode("utf-8"),"shap_results.json","application/json")
+  st.download_button("Download local SHAP values (CSV)",result["local"].to_csv(index=False).encode("utf-8"),"shap_local_values.csv","text/csv")
+  st.warning("This is a baseline experiment, not a clinically or financially validated model. Review target meaning, class balance, preprocessing and model settings before interpreting results. The score does not establish causal influence or a universally best explainer.")
 elif page=="Metric Lab":
- hero("Evaluation engine · methodology","Metric lab","Explore the six proposed evaluation dimensions, their equations, expected direction and design considerations.")
+ hero("Evaluation engine · methodology","Metric lab","Explore proposed evaluation dimensions and review the metrics now calculated by the SHAP experiment.")
  st.caption("Formula reference follows the evaluation methodology in the PBL report. Final implementation choices and metric applicability remain subject to validation.")
  for ix in range(0,len(METRICS),2):
   cols=st.columns(2)
@@ -172,7 +215,7 @@ elif page=="Metric Lab":
  st.latex(r"\mathrm{XAIScore}(e)=\frac{\sum_{k=1}^{6}w_k z^{*}_{e,k}}{\sum_{k=1}^{6}w_k},\quad w_k\geq 0,\;\sum_k w_k>0")
  st.caption("The report suggests equal weights by default and application-specific weighting as an option. Always show raw metrics alongside the aggregate score.")
  st.markdown("### Interactive score demonstration")
- st.warning("Illustrative values only. These are not generated by a model or computed from a dataset.")
+ st.warning("The table below remains a clearly labelled illustrative comparison. For calculated SHAP results, run the SHAP Explainer page on an uploaded dataset. Only SHAP is implemented as a model-backed explainer in this phase.")
  demo=pd.DataFrame({"Explainer":["SHAP","LIME","Anchors"],"Faithfulness Correlation":[.72,.55,.38],"Max-Sensitivity":[.18,.42,.30],"Local Lipschitz Estimate":[.95,1.60,1.25],"Cross-Explainer Agreement":[.68,.52,.41],"Sparseness (Gini)":[.61,.48,.70],"Runtime (s)":[2.40,.90,3.10]})
  st.dataframe(demo,use_container_width=True,hide_index=True); weights={}; cols=st.columns(3)
  for i,m in enumerate(METRICS):
