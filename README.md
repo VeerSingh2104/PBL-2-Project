@@ -1,11 +1,11 @@
 # XAIEvalAgent — Phase 1
 
-XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, and a transparent formula reference. **No machine-learning model is trained or executed in this phase.**
+XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, a transparent formula reference, and an interactive tabular preprocessing workflow. **No machine-learning model is trained or executed in this phase.**
 
 ## Phase 1 capabilities
 - Streamlit workspace with Overview, Dataset Profiler, Metric Lab, Explainer Selector, and System Blueprint sections.
 - Reference schemas from the PBL report: UCI Heart Failure Clinical Records (ID 519) and Statlog German Credit (ID 144).
-- Upload and inspect tabular CSVs: schema, types, missing values, unique counts, descriptive statistics, preview, and simple feature distributions.
+- Upload and inspect tabular CSVs: schema, types, missing values, unique counts, descriptive statistics, preview, and simple feature distributions.\n- Preprocess CSVs: optional duplicate removal, missing-target row removal, train/test split, training-only numeric imputation/scaling, categorical imputation and one-hot encoding, audit summary, and CSV/JSON downloads.
 - Rule-based candidate guidance for SHAP, LIME, Anchors, Integrated Gradients, and Grad-CAM based on user-selected modality/model access.
 - Explanations of six proposed evaluation metrics, formula, direction, range, interpretation, and caveats.
 - Interactive, explicitly illustrative min-max normalization and weighted XAIScore demonstration.
@@ -25,7 +25,7 @@ streamlit run app.py
 ```
 
 ## Phase boundaries
-**Included:** frontend, configuration inputs, static reference-dataset feature dictionaries, live profiling of uploaded CSVs, transparent explainer routing guidance, metric/formula documentation, and a score calculator using fixed illustrative data.
+**Included:** frontend, configuration inputs, static reference-dataset feature dictionaries, live profiling and preprocessing of uploaded CSVs, transparent explainer routing guidance, metric/formula documentation, and a score calculator using fixed illustrative data.
 
 **Not included:** loading or training predictive models, generating real explanations, computing real XAI evaluation metrics, validating recommendations experimentally, or claiming that any explainer is empirically best. The score example is only a demonstration of the aggregation interface.
 
