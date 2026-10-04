@@ -1,13 +1,14 @@
 # XAIEvalAgent — Phase 1
 
-XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, a transparent formula reference, and an interactive tabular preprocessing workflow and a model-backed SHAP experiment page. A baseline Random Forest is trained only in the SHAP experiment page; no multi-model or multi-explainer benchmark is yet implemented.
+XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, a transparent formula reference, and an interactive tabular preprocessing workflow, plus baseline SHAP and LIME experiment pages using Random Forest classifiers. The two explainers can be compared on the same prepared data; stability and robustness are still pending.
 
 ## Phase 1 capabilities
-- Streamlit workspace with Overview, Dataset Profiler, Metric Lab, Explainer Selector, and System Blueprint sections.
+- Streamlit workspace with Overview, Dataset Profiler, Preprocessing Lab, SHAP Explainer, LIME Explainer, Metric Lab, Explainer Selector, and System Blueprint sections.
 - Reference schemas from the PBL report: UCI Heart Failure Clinical Records (ID 519) and Statlog German Credit (ID 144).
 - Upload and inspect tabular CSVs: schema, types, missing values, unique counts, descriptive statistics, preview, and simple feature distributions.\n- Preprocess CSVs: optional duplicate removal, missing-target row removal, train/test split, training-only numeric imputation/scaling, categorical imputation and one-hot encoding, audit summary, and CSV/JSON downloads.
 - Rule-based candidate guidance for SHAP, LIME, Anchors, Integrated Gradients, and Grad-CAM based on user-selected modality/model access.
-- SHAP explainer page: trains a baseline Random Forest on the preprocessed training split, generates SHAP attributions on held-out rows, and calculates SHAP runtime, a perturbation-based faithfulness estimate, and Gini sparseness.
+- SHAP and LIME explainer pages: train baseline Random Forest classifiers on the preprocessed training split and generate held-out local explanations and global feature importance. Both calculate a perturbation-based faithfulness estimate and measured explanation runtime; SHAP also calculates Gini sparseness.
+- Calculated SHAP-LIME cross-explainer agreement using Kendall's tau over aligned feature rankings when both runs are available.
 - Interactive, explicitly illustrative min-max normalization and weighted XAIScore demonstration; non-SHAP methods and the full six-metric benchmark remain future work.
 
 ## Run locally
@@ -27,7 +28,7 @@ streamlit run app.py
 ## Phase boundaries
 **Included:** frontend, configuration inputs, static reference-dataset feature dictionaries, live profiling and preprocessing of uploaded CSVs, transparent explainer routing guidance, metric/formula documentation, and a score calculator using fixed illustrative data.
 
-**Included after SHAP integration:** a baseline Random Forest and TreeSHAP workflow for user-uploaded preprocessed tabular data, with local/global attributions and limited computed diagnostics. **Not included:** a multi-explainer benchmark, all six metric implementations, domain validation, validated model performance, or evidence-based automated recommendation. The weighted score example remains illustrative and must not be reported as an experimental result.
+**Included:** baseline Random Forest experiments with SHAP and LIME on user-uploaded preprocessed tabular data, local/global attributions, perturbation-based faithfulness estimates, runtime measurements, SHAP Gini sparseness, and SHAP-LIME Kendall rank agreement. **Not included:** stability and robustness calculations, Anchors/Integrated Gradients/Grad-CAM execution, domain validation, validated model performance, or evidence-based automated recommendation. The weighted score demo remains illustrative and must not be reported as an experimental result.
 
 ## Proposed evaluation dimensions
 | Metric | Dimension | Direction |
@@ -42,4 +43,4 @@ streamlit run app.py
 Metric definitions and exact evaluation protocols should be validated and finalized before Phase 2 experiments. Normalized scores are candidate-set-relative and should be shown alongside raw metric values.
 
 ## Technology
-Python, Streamlit, Pandas, NumPy. XAI/model libraries are intentionally deferred until model-backed phases.
+Python, Streamlit, Pandas, NumPy, scikit-learn, SHAP, and LIME.
