@@ -1,125 +1,172 @@
-import io
-import json
-import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-from xai_agent import profile_data, train_models, explain_instance, evaluate_attributions, rank_explainers, METRIC_DIRECTIONS
+import pandas as pd
+import numpy as np
 
-st.set_page_config(page_title="XAIEvalAgent", page_icon="🔎", layout="wide")
-st.title("XAIEvalAgent")
-st.caption("Automated XAI method selection, multi-metric evaluation, comparison and recommendation")
-st.info("Research prototype based on the PBL-2 report. Rankings are conditional on the selected data, model, metrics and weights—not a universal explainer ranking.")
+st.set_page_config(page_title="XAIEvalAgent | Phase 1", page_icon="◈", layout="wide", initial_sidebar_state="expanded")
 
-@st.cache_data(show_spinner=False)
-def load_uci(dataset_id):
-    from ucimlrepo import fetch_ucirepo
-    data = fetch_ucirepo(id=dataset_id)
-    X = data.data.features.copy()
-    y = data.data.targets.copy()
-    if isinstance(y, pd.DataFrame):
-        y = y.iloc[:, 0]
-    X.columns = [str(c).strip().replace(" ", "_") for c in X.columns]
-    return X.assign(__target__=y.astype(str).values)
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&display=swap');
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif}
+.stApp{background:#0b1020;color:#e8edf8}
+[data-testid="stSidebar"]{background:#10172a;border-right:1px solid #202b43}
+[data-testid="stMetric"]{background:#111a2e;border:1px solid #26334e;padding:16px 18px;border-radius:14px}
+[data-testid="stMetricLabel"]{color:#9ba9c5}
+[data-testid="stMetricValue"]{color:#f2f5ff}
+div[data-testid="stVerticalBlockBorderWrapper"]{border-color:#27344f!important;border-radius:14px}
+.hero{padding:28px 30px;border:1px solid #293956;border-radius:20px;background:radial-gradient(ellipse at 85% 0%,#20335a 0%,#131e36 42%,#10182b 100%);margin-bottom:18px}
+.eyebrow{font-family:'DM Mono',monospace;color:#82a9ff;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+.hero h1{font-size:38px;line-height:1.15;margin:9px 0;color:#f3f6ff;font-weight:800}
+.hero p{font-size:15px;color:#b4c1d9;max-width:800px}
+.pill{display:inline-block;border:1px solid #35507d;background:#172747;color:#a9c6ff;border-radius:99px;padding:5px 10px;font-size:11px;font-family:'DM Mono',monospace;margin-right:6px}
+.section-kicker{font-family:'DM Mono',monospace;color:#8aa5d5;font-size:11px;letter-spacing:1.5px;text-transform:uppercase}
+.metric-card{padding:17px 18px;border:1px solid #27344f;border-radius:14px;background:#111a2e;height:100%}
+.metric-card h3{font-size:16px;color:#f2f5ff;margin:5px 0 8px}
+.metric-card p{font-size:13px;color:#aab8d2;line-height:1.55}
+.formula{font-family:'DM Mono',monospace;background:#0a1223;color:#a9d8ff;border:1px solid #263752;border-radius:9px;padding:12px;font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.muted{color:#9eacc6;font-size:13px}
+.smallcap{font-family:'DM Mono',monospace;font-size:11px;color:#85a1d1}
+div.stButton>button[kind="primary"]{background:#6288f5;border:0;color:white;border-radius:10px;font-weight:700}
+.stTabs [data-baseweb="tab"]{color:#aebbd4}
+hr{border-color:#26334c}
+</style>
+""",unsafe_allow_html=True)
 
-with st.sidebar:
-    st.header("1 · Dataset")
-    source = st.radio("Data source", ["Upload CSV", "Heart Failure (UCI 519)", "German Credit (UCI 144)", "Built-in demo"])
-    uploaded = st.file_uploader("Choose CSV", type=["csv"]) if source == "Upload CSV" else None
-    if source == "Heart Failure (UCI 519)":
-        st.caption("299 patient records · 12 clinical features · DEATH_EVENT target")
-    elif source == "German Credit (UCI 144)":
-        st.caption("1,000 applicants · 20 attributes · credit risk target")
-    st.divider()
-    st.header("2 · Evaluation")
-    test_size = st.slider("Test split", .15, .4, .25, .05)
-    methods = st.multiselect("Explainers", ["SHAP", "LIME"], default=["SHAP", "LIME"])
-    st.caption("Anchors, Integrated Gradients and Grad-CAM are extension candidates; this initial tabular version does not yet execute them.")
-    st.divider()
-    st.header("3 · Metric weights")
-    weights = {}
-    defaults = {"Faithfulness Correlation":1,"Max-Sensitivity":1,"Local Lipschitz Estimate":1,"Cross-Explainer Agreement":1,"Sparseness (Gini)":1,"Runtime (s)":1}
-    for metric in METRIC_DIRECTIONS:
-        weights[metric] = st.slider(metric, 0.0, 3.0, 1.0, .25, key="w_"+metric)
+DATASETS={
+"Heart Failure Clinical Records":{"domain":"Healthcare","source":"UCI Machine Learning Repository · ID 519","rows":"299 records","target":"DEATH_EVENT","features":[
+("age","Patient age (years)","Numerical"),("anaemia","Decrease of red blood cells or haemoglobin","Binary"),("creatinine_phosphokinase","CPK enzyme level in blood (mcg/L)","Numerical"),("diabetes","Whether the patient has diabetes","Binary"),("ejection_fraction","Percentage of blood leaving the heart per contraction","Numerical"),("high_blood_pressure","Whether the patient has hypertension","Binary"),("platelets","Platelet count (kiloplatelets/mL)","Numerical"),("serum_creatinine","Serum creatinine level (mg/dL)","Numerical"),("serum_sodium","Serum sodium level (mEq/L)","Numerical"),("sex","Sex attribute","Binary"),("smoking","Whether the patient smokes","Binary"),("time","Follow-up period (days)","Numerical"),("DEATH_EVENT","Death during follow-up (target)","Target · Binary")]},
+"Statlog German Credit":{"domain":"Finance","source":"UCI Machine Learning Repository · ID 144","rows":"1,000 records","target":"Credit Risk","features":[
+("checking_status","Status/balance of checking account","Categorical"),("duration","Credit duration (months)","Numerical"),("credit_history","Past credit repayment behaviour","Categorical"),("purpose","Purpose of loan","Categorical"),("credit_amount","Loan amount requested","Numerical"),("savings_status","Savings account/bonds","Categorical"),("employment","Duration of current employment","Categorical"),("installment_rate","Installment as % of disposable income","Numerical"),("personal_status_sex","Personal status and sex","Categorical"),("other_debtors","Other debtors/guarantors","Categorical"),("residence_since","Years at current residence","Numerical"),("property","Property type","Categorical"),("age","Applicant age (years)","Numerical"),("other_installment_plans","Other installment plans","Categorical"),("housing","Housing situation","Categorical"),("existing_credits","Number of existing credits at bank","Numerical"),("job","Employment/skill category","Categorical"),("people_liable","Number of dependents","Numerical"),("telephone","Registered telephone status","Categorical"),("foreign_worker","Foreign worker status","Categorical"),("Credit Risk","Good/bad credit risk (target)","Target · Binary")]}
+}
+METRICS=[
+{"name":"Faithfulness Correlation","dimension":"Fidelity","direction":"Higher is better","range":"−1 to 1","formula":"corr( attribution_mass(S), | f(x) − f(x with S replaced by baseline) | )","meaning":"Tests whether feature importance aligns with the change in model output when features are removed or replaced. Sample feature subsets S, compare attribution mass with prediction change, then correlate.","caveat":"Depends on the baseline, feature subsets and perturbation protocol. Correlation is not proof of causal influence."},
+{"name":"Max-Sensitivity","dimension":"Robustness","direction":"Lower is better","range":"0 and upward","formula":"max_{δ ∈ N(x), ||δ|| ≤ r} || Φ(x) − Φ(x + δ) ||","meaning":"Measures the largest change in the explanation under small input perturbations within a defined radius r. In practice, approximate the maximum by sampling a fixed set of perturbations.","caveat":"The perturbation radius, distance metric and sampling strategy must be fixed and reported."},
+{"name":"Local Lipschitz Estimate","dimension":"Stability","direction":"Lower is better","range":"0 and upward","formula":"max_{z ∈ N(x), z ≠ x}  || Φ(x) − Φ(z) || / || x − z ||","meaning":"Measures the rate at which an explanation changes relative to the size of a nearby input change. Unlike Max-Sensitivity, it is a change-per-distance estimate.","caveat":"A neighborhood and compatible input/attribution distance functions are required; estimate depends on sampled neighbors."},
+{"name":"Cross-Explainer Agreement","dimension":"Consistency","direction":"Higher is better","range":"−1 to 1","formula":"Agreement_j = mean_{k ≠ j} τ( rank(|Φ_j(x)|), rank(|Φ_k(x)|) )","meaning":"Uses Kendall’s rank correlation τ to measure whether candidate explainers agree on the relative importance of features for the same input. Average agreement against the other applicable explainers.","caveat":"Agreement is relative, not ground truth. Methods can agree and still be unfaithful; rankings need aligned feature spaces."},
+{"name":"Sparseness (Gini Index)","dimension":"Interpretability proxy","direction":"Higher is better","range":"0 to 1","formula":"Gini(a) = [2 Σᵢ₌₁ⁿ i·|a|_(i)] / [n Σᵢ₌₁ⁿ |a|_(i)] − (n+1)/n","meaning":"Calculates concentration of absolute attributions, where |a|_(i) are sorted in ascending order. A higher Gini value means a smaller number of features dominate the explanation.","caveat":"Compactness is only a proxy for interpretability; it does not establish correctness or human understandability. Define the zero-attribution case as 0."},
+{"name":"Runtime","dimension":"Computational cost","direction":"Lower is better","range":"0 and upward (seconds)","formula":"Runtime = (1 / M) Σⱼ₌₁ᴹ (tⱼ_end − tⱼ_start)","meaning":"Measures the average elapsed time to generate an explanation across M explained instances, using a consistent timing protocol.","caveat":"Record hardware, software, warm-up, sample count and whether preprocessing is included."}
+]
+st.sidebar.markdown('<div class="eyebrow">XAIEVALAGENT</div><h2 style="color:#eef3ff;margin:4px 0 0">Phase 1</h2><p class="muted">Research prototype · No model execution</p>',unsafe_allow_html=True)
+page=st.sidebar.radio("WORKSPACE",["Overview","Dataset Profiler","Metric Lab","Explainer Selector","System Blueprint"],label_visibility="collapsed")
+st.sidebar.divider()
+st.sidebar.markdown('<span class="pill">PHASE 1</span><span class="pill">UI + FORMULAS</span>',unsafe_allow_html=True)
+st.sidebar.caption("Model training and live XAI evaluation are intentionally out of scope for this phase.")
 
-try:
-    if source == "Upload CSV":
-        if uploaded is None: st.warning("Upload a CSV to begin."); st.stop()
-        df = pd.read_csv(uploaded)
-    elif source == "Heart Failure (UCI 519)":
-        df = load_uci(519)
-    elif source == "German Credit (UCI 144)":
-        df = load_uci(144)
-    else:
-        from sklearn.datasets import load_breast_cancer
-        d = load_breast_cancer(as_frame=True)
-        df = d.frame.rename(columns={"target":"__target__"})
-        df["__target__"] = df["__target__"].map({0:"malignant",1:"benign"})
-except Exception as e:
-    st.error(f"Could not load dataset: {e}")
-    st.stop()
+def hero(kicker,title,desc):
+ st.markdown(f'<div class="hero"><div class="eyebrow">{kicker}</div><h1>{title}</h1><p>{desc}</p><span class="pill">DESIGN & METHODOLOGY</span><span class="pill">INTERACTIVE PROTOTYPE</span></div>',unsafe_allow_html=True)
+def metric_card(m):
+ st.markdown(f'<div class="metric-card"><div class="section-kicker">{m["dimension"]} · {m["direction"]}</div><h3>{m["name"]}</h3><p>{m["meaning"]}</p><div class="formula">{m["formula"]}</div><p style="margin-bottom:0"><b>Range:</b> {m["range"]}<br><span class="muted">{m["caveat"]}</span></p></div>',unsafe_allow_html=True)
 
-if df.empty or len(df.columns) < 2:
-    st.error("Dataset must contain at least one feature and one target column."); st.stop()
-st.subheader("Dataset overview")
-target_default = "__target__" if "__target__" in df.columns else str(df.columns[-1])
-target = st.selectbox("Target column", list(df.columns), index=list(df.columns).index(target_default))
-profile = profile_data(df, target)
-c1,c2,c3,c4 = st.columns(4)
-c1.metric("Rows", f"{profile['rows']:,}")
-c2.metric("Features", profile["features"])
-c3.metric("Numeric / categorical", f"{profile['numeric_features']} / {profile['categorical_features']}")
-c4.metric("Missing values", profile["missing_values"])
-with st.expander("Preview dataset"):
-    st.dataframe(df.head(20), use_container_width=True)
-st.write("**Detected profile:**", f"{profile['task']} · {profile['modality']} · {len(profile['classes'])} classes")
-if len(profile["classes"]) < 2:
-    st.error("The selected target must have at least two classes."); st.stop()
-
-if st.button("Train models & evaluate explainers", type="primary", disabled=not methods):
-    try:
-        with st.spinner("Training models and evaluating candidate explainers…"):
-            models = train_models(df, target, test_size)
-            result_sets = {}
-            for model_name, model in models.items():
-                instance = model.X_test.iloc[[0]].copy()
-                attrs, runtimes = explain_instance(model, instance, methods)
-                if not attrs:
-                    st.warning(f"No explanations were generated for {model_name}.")
-                    continue
-                metrics = evaluate_attributions(model, instance, attrs, runtimes)
-                result_sets[model_name] = rank_explainers(metrics, weights)
-        st.session_state["results"] = result_sets
-        st.session_state["models"] = {k: {"accuracy":v.accuracy} for k,v in models.items()}
-    except Exception as e:
-        st.exception(e)
-
-results = st.session_state.get("results", {})
-if results:
-    st.subheader("Evaluation results")
-    for model_name, ranked in results.items():
-        st.markdown(f"### {model_name}")
-        st.caption(f"Test accuracy (context only): {st.session_state['models'][model_name]['accuracy']:.3f}")
-        best = ranked.iloc[0]
-        st.success(f"Recommended explainer for this run: {best['Explainer']} · XAIScore {best['XAIScore']:.3f}")
-        st.write("Recommendation is derived from the displayed metrics and current weights.")
-        visible = [c for c in ranked.columns if c != "Attributions"]
-        st.dataframe(ranked[visible].style.format(precision=4), use_container_width=True)
-        fig, ax = plt.subplots(figsize=(8,3))
-        ax.bar(ranked["Explainer"], ranked["XAIScore"])
-        ax.set_ylabel("XAIScore (0–1)")
-        ax.set_ylim(0,1)
-        ax.set_title("Explainer comparison")
-        st.pyplot(fig)
-        with st.expander("Feature attribution details"):
-            for _, row in ranked.iterrows():
-                vals = pd.DataFrame({"Feature":df.drop(columns=[target]).columns,"Attribution":row["Attributions"]})
-                vals["Absolute importance"] = vals["Attribution"].abs()
-                st.markdown(f"**{row['Explainer']}**")
-                st.dataframe(vals.sort_values("Absolute importance",ascending=False).drop(columns="Absolute importance"), use_container_width=True)
-        csv = ranked[visible].to_csv(index=False).encode()
-        st.download_button(f"Download {model_name} metrics (CSV)", csv, file_name=f"{model_name.lower().replace(' ','_')}_metrics.csv", mime="text/csv", key="csv_"+model_name)
-    payload = {name: ranked.drop(columns=["Attributions"]).to_dict(orient="records") for name,ranked in results.items()}
-    st.download_button("Download complete evaluation (JSON)", json.dumps(payload,indent=2,default=float), file_name="xaievalagent_report.json", mime="application/json")
-else:
-    st.markdown("### How to use")
-    st.markdown("1. Load one of the report datasets or upload a tabular CSV.\n2. Select the target column.\n3. Choose candidate explainers and metric weights.\n4. Run the evaluation and inspect the ranking, metric table and report exports.")
+if page=="Overview":
+ hero("Automated explainability evaluation","From model profile to explainability insight.","A transparent workspace for identifying applicable XAI methods, defining evaluation criteria, and planning evidence-based comparison.")
+ a,b,c=st.columns(3); a.metric("6","Evaluation metrics","Proposed in the report"); b.metric("5","Candidate explainers","Across tabular and deep visual models"); c.metric("2","Reference datasets","Healthcare + finance")
+ st.markdown("### Phase 1 workflow")
+ stages=[("01","Configure","Choose data modality, task, model access and explanation need."),("02","Profile","Extract dataset and model characteristics into a profile."),("03","Select","Apply transparent rules to identify potentially applicable explainers."),("04","Evaluate","Review proposed metrics, definitions, directions and formulas."),("05","Compare","Explore a clearly illustrative scoring example and weighting."),("06","Recommend","Understand how later evidence can support a contextual recommendation.")]
+ for ix in range(0,6,3):
+  cols=st.columns(3)
+  for col,item in zip(cols,stages[ix:ix+3]):
+   with col: st.markdown(f'<div class="metric-card"><div class="smallcap">STEP {item[0]}</div><h3>{item[1]}</h3><p>{item[2]}</p></div>',unsafe_allow_html=True)
+ st.markdown("### What Phase 1 delivers")
+ st.markdown("- Interactive frontend and dataset profiling for the two report datasets and user-uploaded CSV files.\n- Explainer applicability guidance based on the selected profile.\n- Feature definitions and a metric-by-metric formula reference.\n- Transparent, configurable score demonstration using illustrative values only.\n- Architecture and clear boundary between implemented interface and future model-backed evaluation.")
+ st.warning("No model is trained and no real explanation or metric result is produced in Phase 1. Any example score is labelled illustrative, not an experiment result.")
+elif page=="Dataset Profiler":
+ hero("Input & configuration module","Dataset profiler","Inspect feature schema, data types, missingness and basic distributions without fitting a predictive model.")
+ choice=st.selectbox("Reference dataset",list(DATASETS)+["Upload your own CSV"])
+ if choice=="Upload your own CSV":
+  uploaded=st.file_uploader("Upload a tabular CSV",type=["csv"])
+  if uploaded is None: st.info("Upload a CSV to inspect its columns and descriptive statistics."); st.stop()
+  try: df=pd.read_csv(uploaded)
+  except Exception as e: st.error(f"Unable to read CSV: {e}"); st.stop()
+  target=st.selectbox("Target column (optional for profiling)",["— Not specified —"]+df.columns.tolist())
+  features=[c for c in df.columns if c!=target]
+  profile=pd.DataFrame({"Feature":features,"Type":[str(df[c].dtype) for c in features],"Missing":[int(df[c].isna().sum()) for c in features],"Unique":[int(df[c].nunique(dropna=True)) for c in features]})
+  domain="Custom upload"; src="User-provided CSV"; rows=len(df)
+  numeric=df[features].select_dtypes(include=np.number)
+  cat=df[features].select_dtypes(exclude=np.number)
+ else:
+  spec=DATASETS[choice]; domain=spec["domain"]; src=spec["source"]; rows=spec["rows"]; target=spec["target"]
+  features=[f[0] for f in spec["features"] if not f[2].startswith("Target")]
+  profile=pd.DataFrame(spec["features"],columns=["Feature","Description","Type"])
+  numeric=cat=None
+  st.caption(f"{src} · {spec['rows']} · target: {target}")
+ a,b,c,d=st.columns(4)
+ a.metric("Rows",f"{rows:,}" if isinstance(rows,int) else rows); b.metric("Features",len(features))
+ b2=len(df[features].select_dtypes(include=np.number).columns) if choice=="Upload your own CSV" else sum(x[2]=="Numerical" for x in spec["features"])
+ c.metric("Numeric",b2); d.metric("Categorical / binary",len(features)-b2)
+ st.markdown("### Extracted feature inventory"); st.dataframe(profile,use_container_width=True,hide_index=True)
+ if choice=="Upload your own CSV":
+  q1,q2,q3=st.columns(3); q1.metric("Missing cells",int(df[features].isna().sum().sum())); q2.metric("Duplicate rows",int(df.duplicated().sum())); q3.metric("Target",str(target))
+  with st.expander("Descriptive statistics"): st.dataframe(df[features].describe(include="all").transpose(),use_container_width=True)
+  with st.expander("Data preview"): st.dataframe(df.head(25),use_container_width=True)
+  with st.expander("Per-feature distribution"):
+   col=st.selectbox("Choose feature",features)
+   if pd.api.types.is_numeric_dtype(df[col]): st.bar_chart(df[col].dropna().value_counts(bins=20).sort_index())
+   else: st.bar_chart(df[col].astype("string").fillna("Missing").value_counts().head(20))
+ else: st.info("Reference schema is shown from the PBL report. Upload a local CSV to calculate live missingness, uniqueness and distributions.")
+ st.markdown("### Profile extracted by Phase 1")
+ st.code(f"modality: tabular\\ndomain: {domain}\\ntask: classification (reference target)\\ntarget: {target}\\nfeature_count: {len(features)}\\nmodel_loaded: false\\nprediction_interface: unavailable",language="yaml")
+elif page=="Metric Lab":
+ hero("Evaluation engine · methodology","Metric lab","Explore the six proposed evaluation dimensions, their equations, expected direction and design considerations.")
+ st.caption("Formula reference follows the evaluation methodology in the PBL report. Final implementation choices and metric applicability remain subject to validation.")
+ for ix in range(0,len(METRICS),2):
+  cols=st.columns(2)
+  for col,m in zip(cols,METRICS[ix:ix+2]):
+   with col: metric_card(m)
+ st.markdown("### Proposed normalization")
+ st.markdown("Metrics use different scales, so raw values should not be added directly. The report proposes min–max normalization within the candidate set, with direction correction so larger normalized values always indicate better performance.")
+ st.latex(r"\displaystyle z_{e,k}=\frac{r_{e,k}-\min(r_{:,k})}{\max(r_{:,k})-\min(r_{:,k})}")
+ st.latex(r"z^{*}_{e,k}=\begin{cases}z_{e,k},&\text{higher is better}\\1-z_{e,k},&\text{lower is better}\end{cases}")
+ st.caption("If all candidates have the same value for a metric, define a consistent neutral handling policy (for example, assign 1 to all for that run). Scores are relative to the current candidate set.")
+ st.markdown("### Proposed weighted XAIScore")
+ st.latex(r"\mathrm{XAIScore}(e)=\frac{\sum_{k=1}^{6}w_k z^{*}_{e,k}}{\sum_{k=1}^{6}w_k},\quad w_k\geq 0,\;\sum_k w_k>0")
+ st.caption("The report suggests equal weights by default and application-specific weighting as an option. Always show raw metrics alongside the aggregate score.")
+ st.markdown("### Interactive score demonstration")
+ st.warning("Illustrative values only. These are not generated by a model or computed from a dataset.")
+ demo=pd.DataFrame({"Explainer":["SHAP","LIME","Anchors"],"Faithfulness Correlation":[.72,.55,.38],"Max-Sensitivity":[.18,.42,.30],"Local Lipschitz Estimate":[.95,1.60,1.25],"Cross-Explainer Agreement":[.68,.52,.41],"Sparseness (Gini)":[.61,.48,.70],"Runtime (s)":[2.40,.90,3.10]})
+ st.dataframe(demo,use_container_width=True,hide_index=True); weights={}; cols=st.columns(3)
+ for i,m in enumerate(METRICS):
+  with cols[i%3]: weights[m["name"]]=st.slider(m["name"],0.0,3.0,1.0,.25,key="demo_"+str(i))
+ score=demo.copy()
+ for m in METRICS:
+  n=m["name"]; v=score[n].astype(float); lo,hi=v.min(),v.max(); z=(v-lo)/(hi-lo) if hi>lo else pd.Series(np.ones(len(v)))
+  score[n+" · normalized"]=z if m["direction"]=="Higher is better" else 1-z
+ active=[m for m in METRICS if weights[m["name"]]>0]
+ if not active: st.error("Set at least one weight above zero.")
+ else:
+  total=sum(weights[m["name"]] for m in active); score["Illustrative XAIScore"]=sum(score[m["name"]+" · normalized"]*weights[m["name"]]/total for m in active)
+  score=score.sort_values("Illustrative XAIScore",ascending=False).reset_index(drop=True); score.insert(0,"Illustrative rank",np.arange(1,len(score)+1))
+  st.dataframe(score[["Illustrative rank","Explainer","Illustrative XAIScore"]],use_container_width=True,hide_index=True)
+  st.bar_chart(score.set_index("Explainer")["Illustrative XAIScore"])
+  st.caption("Changing weights can change the ranking. This preview demonstrates aggregation only, not explainer performance.")
+elif page=="Explainer Selector":
+ hero("Rule-based applicability","Explainer selector","Explore which candidate explanation methods may fit a model/data profile. This is guidance, not a claim that an explainer has run.")
+ modality=st.selectbox("Data modality",["Tabular","Image","Text"]); model=st.selectbox("Model family",["Tree-based","Neural network","Other black-box","Not decided"])
+ diff=st.radio("Are gradients available?",["Yes","No","Unknown"],horizontal=True); internals=st.radio("Model internals accessible?",["Yes","No","Unknown"],horizontal=True)
+ need=st.multiselect("Explanation requirement",["Local feature attribution","Global feature importance","Visual heatmap","Rule-based explanation"],default=["Local feature attribution"])
+ methods={"SHAP":("Tabular, image and other supported model settings","Prediction function or supported model-specific implementation","Broad attribution framework; method and runtime depend on model."),"LIME":("Tabular, image and text","Prediction interface","Model-agnostic local surrogate explanation."),"Anchors":("Tabular, image and text (with suitable implementation)","Prediction interface","Produces local high-precision rules."),"Integrated Gradients":("Differentiable neural models","Gradient access","Gradient-based attribution; requires differentiability."),"Grad-CAM":("Deep visual models with suitable convolutional layers","Model internals and gradients","Produces a class-discriminative visual localization map.")}
+ candidate=[]
+ for name,(data,access,desc) in methods.items():
+  eligible=(modality=="Tabular" and name in ["SHAP","LIME","Anchors"]) or (modality=="Image" and name in ["SHAP","LIME","Anchors","Integrated Gradients","Grad-CAM"]) or (modality=="Text" and name in ["SHAP","LIME","Anchors"])
+  if name=="Integrated Gradients" and (model!="Neural network" or diff!="Yes"): eligible=False
+  if name=="Grad-CAM" and (modality!="Image" or model!="Neural network" or diff!="Yes" or internals!="Yes"): eligible=False
+  if eligible: candidate.append((name,data,access,desc))
+ st.markdown("### Candidate methods")
+ if candidate:
+  for name,data,access,desc in candidate:
+   st.markdown(f'<div class="metric-card" style="margin-bottom:10px"><div class="section-kicker">POTENTIALLY APPLICABLE</div><h3>{name}</h3><p>{desc}</p><p><b>Data:</b> {data}<br><b>Requirement:</b> {access}</p></div>',unsafe_allow_html=True)
+ else: st.info("No candidates matched the current rule set. Adjust the profile or mark it as undecided.")
+ st.caption("Candidate routing is a Phase 1 rule-based illustration. Exact compatibility depends on input representation, library support, model interface and implementation testing.")
+ st.markdown("### Profile summary"); st.json({"modality":modality,"model_family":model,"gradients_available":diff,"internals_accessible":internals,"explanation_requirements":need,"candidate_explainers":[x[0] for x in candidate],"model_loaded":False})
+elif page=="System Blueprint":
+ hero("Architecture & scope","System blueprint","A staged plan aligned with the report's proposed evaluation pipeline.")
+ modules=[("01","Input & configuration","Dataset, model metadata, task and application context","Structured configuration"),("02","Model/dataset profiler","Data modality, task, model family, differentiability and prediction interface","Profile dictionary"),("03","Explainer selection","Rule-based compatibility and explanation requirements","Candidate explainer list"),("04","Explanation generation","Candidate explainer + same model + relevant inputs","Attribution, rule or heatmap"),("05","Evaluation engine","Explanation outputs and standardized protocol","Metric results per explainer"),("06","Normalization & aggregation","Raw metrics, metric direction and weights","Normalized score / XAIScore"),("07","Ranking","Scores with individual metric values","Ranked candidate table"),("08","Recommendation & report","Ranking, constraints and metric evidence","Recommendation with reasoning and report")]
+ for n,title,inp,out in modules:
+  i=int(n); status="PHASE 1 UI" if i in [1,2,3,6,7,8] else "FUTURE INTEGRATION"
+  st.markdown(f'<div class="metric-card" style="margin-bottom:9px"><div class="smallcap">MODULE {n}</div><h3>{title}</h3><p><b>Input:</b> {inp}<br><b>Output:</b> {out}</p><span class="pill">{status}</span></div>',unsafe_allow_html=True)
+ st.markdown("### Phase boundaries"); left,right=st.columns(2)
+ with left:
+  st.markdown("#### Phase 1 · This prototype"); st.markdown("- Interactive Streamlit interface\n- Reference dataset schemas and CSV inspection\n- Model/data profile configuration\n- Rule-based candidate explainer guidance\n- Metric catalogue with formulas and caveats\n- Illustrative normalization, weights and score preview")
+ with right:
+  st.markdown("#### Later phases · Not active"); st.markdown("- Load/train models and generate explanations\n- Execute metrics under controlled perturbation protocols\n- Aggregate measurements over test instances\n- Validate metric definitions and applicability\n- Evidence-based recommendation from actual results\n- Persist experiment runs and export full evaluation reports")
+ st.info("The report describes the system as a selection, evaluation, comparison and recommendation layer—not a new predictive model. Phase 1 makes the methodology inspectable while keeping model-backed claims for later experimentation.")
+st.markdown("<hr><p class='muted' style='text-align:center'>XAIEvalAgent · PBL-2 · Phase 1 prototype · No model execution or experimental claims</p>",unsafe_allow_html=True)

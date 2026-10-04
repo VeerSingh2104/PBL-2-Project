@@ -1,14 +1,14 @@
-# XAIEvalAgent
+# XAIEvalAgent — Phase 1
 
-An automated Explainable AI evaluation prototype based on the PBL-2 report. It profiles tabular classification data, trains comparable models, generates candidate explanations, evaluates them on multiple dimensions, ranks candidates with a configurable weighted score, and produces a transparent recommendation.
+XAIEvalAgent is a proposed automated workflow for selecting, evaluating, comparing, ranking, and recommending Explainable AI (XAI) methods. This Phase 1 implementation focuses on an interactive frontend, dataset profiling, explainer applicability guidance, and a transparent formula reference. **No machine-learning model is trained or executed in this phase.**
 
-## Scope
-- Domains in the report: UCI Heart Failure Clinical Records (ID 519) and Statlog German Credit (ID 144).
-- Upload a CSV and choose its target column, or load either UCI dataset from the application.
-- Train Random Forest and a feed-forward neural network (MLP) on the same split.
-- Candidate explainers: SHAP and LIME. Anchors is listed as an optional extension and is surfaced only when installed and compatible. Integrated Gradients and Grad-CAM are not yet implemented in this tabular prototype.
-- Metrics: Faithfulness Correlation, Max-Sensitivity, Local Lipschitz Estimate, Cross-Explainer Agreement, Sparseness (Gini), and runtime.
-- Min-max normalization with direction correction; configurable metric weights; metric values remain visible beside XAIScore.
+## Phase 1 capabilities
+- Streamlit workspace with Overview, Dataset Profiler, Metric Lab, Explainer Selector, and System Blueprint sections.
+- Reference schemas from the PBL report: UCI Heart Failure Clinical Records (ID 519) and Statlog German Credit (ID 144).
+- Upload and inspect tabular CSVs: schema, types, missing values, unique counts, descriptive statistics, preview, and simple feature distributions.
+- Rule-based candidate guidance for SHAP, LIME, Anchors, Integrated Gradients, and Grad-CAM based on user-selected modality/model access.
+- Explanations of six proposed evaluation metrics, formula, direction, range, interpretation, and caveats.
+- Interactive, explicitly illustrative min-max normalization and weighted XAIScore demonstration.
 
 ## Run locally
 Python 3.10+ recommended.
@@ -17,29 +17,29 @@ Python 3.10+ recommended.
 git clone https://github.com/VeerSingh2104/PBL-2-Project.git
 cd PBL-2-Project
 python -m venv .venv
-# Windows: .venv\Scripts\activate
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
 # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Workflow
-1. Load a report dataset or upload a tabular CSV.
-2. Select the target and classification task.
-3. Train Random Forest and MLP with a stratified train/test split.
-4. Select a test instance and generate SHAP/LIME explanations.
-5. Evaluate explanations under the same model and instance set.
-6. Review normalized metrics, weighted score, ranking, and recommendation.
-7. Export results as CSV/JSON.
+## Phase boundaries
+**Included:** frontend, configuration inputs, static reference-dataset feature dictionaries, live profiling of uploaded CSVs, transparent explainer routing guidance, metric/formula documentation, and a score calculator using fixed illustrative data.
 
-## Metric interpretation
-Higher is better for Faithfulness Correlation, Cross-Explainer Agreement, and Sparseness. Lower is better for Max-Sensitivity, Local Lipschitz Estimate, and Runtime. Sparseness measures compactness only; it does not prove correctness. Agreement is relative to the candidate explainers included in the same run. Normalized scores are comparable only within that run.
+**Not included:** loading or training predictive models, generating real explanations, computing real XAI evaluation metrics, validating recommendations experimentally, or claiming that any explainer is empirically best. The score example is only a demonstration of the aggregation interface.
 
-## Important limitations
-This is a research prototype, not a clinical or lending decision system. The recommendation is conditional on the selected model, data, instance, metric definitions, and weights; it is not a universal “best explainer” claim. Dataset access requires internet when using the UCI loader. Small datasets and expensive model-agnostic explainers can require additional runtime.
+## Proposed evaluation dimensions
+| Metric | Dimension | Direction |
+|---|---|---|
+| Faithfulness Correlation | Fidelity | Higher |
+| Max-Sensitivity | Robustness | Lower |
+| Local Lipschitz Estimate | Stability | Lower |
+| Cross-Explainer Agreement | Consistency | Higher |
+| Sparseness (Gini Index) | Interpretability proxy | Higher |
+| Runtime | Computational cost | Lower |
 
-## Project structure
-- `app.py` — Streamlit interface
-- `xai_agent.py` — profiling, model training, explanations, metrics, scoring
-- `requirements.txt` — dependencies
-- `tests/test_metrics.py` — metric sanity checks
+Metric definitions and exact evaluation protocols should be validated and finalized before Phase 2 experiments. Normalized scores are candidate-set-relative and should be shown alongside raw metric values.
+
+## Technology
+Python, Streamlit, Pandas, NumPy. XAI/model libraries are intentionally deferred until model-backed phases.
