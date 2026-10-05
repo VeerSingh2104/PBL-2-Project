@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from sklearn.utils.multiclass import type_of_target
 from preprocessing import prepare_tabular_data
 from shap_explainer import run_shap_experiment
 from lime_explainer import run_lime_experiment
@@ -125,6 +126,12 @@ elif page=="Preprocessing Lab":
  if len(set(raw.columns))!=len(raw.columns):
   st.error("Column names are duplicated after trimming whitespace."); st.stop()
  target=st.selectbox("Target column",raw.columns.tolist(),key="prep_target")
+ target_kind=type_of_target(raw[target].dropna())
+ target_classes=int(raw[target].nunique(dropna=True))
+ if target_kind in ("binary","multiclass"):
+  st.caption(f"Target type: **{target_kind}** · {target_classes} classes · classification experiment supported.")
+ else:
+  st.warning(f"Target type: **{target_kind}** · {target_classes} unique values. Phase 1 expects a binary or multiclass classification target. Select the actual label column before running preprocessing.")
  p1,p2,p3=st.columns(3)
  with p1: test_pct=st.slider("Test split (%)",10,40,20,5)
  with p2: scaling=st.selectbox("Numeric scaling",["StandardScaler","MinMaxScaler","None"])
@@ -134,7 +141,7 @@ elif page=="Preprocessing Lab":
  with p5: cat_imp=st.selectbox("Categorical missing values",["most_frequent","constant"],help="Constant imputation fills missing categories with a dedicated placeholder.")
  random_seed=st.number_input("Random seed",min_value=0,max_value=99999,value=42,step=1)
  st.caption("Categorical features are one-hot encoded. The target is retained in its original form and is not scaled or encoded by this feature-preparation step.")
- if st.button("Run preprocessing",type="primary"):
+ if st.button("Run preprocessing",type="primary",disabled=target_kind not in ("binary","multiclass")):
   try:
    train,test,audit=prepare_tabular_data(raw,target,test_pct/100,scaling,num_imp,cat_imp,dupes,int(random_seed))
    st.session_state["prep_train"]=train
