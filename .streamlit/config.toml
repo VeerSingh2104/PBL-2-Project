@@ -1,0 +1,9 @@
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[server]
+enableCORS = true
+enableXsrfProtection = true
+maxUploadSize = 200
