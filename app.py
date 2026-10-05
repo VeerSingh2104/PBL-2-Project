@@ -125,7 +125,21 @@ elif page=="Preprocessing Lab":
  raw.columns=[str(c).strip() for c in raw.columns]
  if len(set(raw.columns))!=len(raw.columns):
   st.error("Column names are duplicated after trimming whitespace."); st.stop()
- target=st.selectbox("Target column",raw.columns.tolist(),key="prep_target")
+ target_options=raw.columns.tolist()
+ target_default=0
+ priority_names={"target","label","class","outcome","death_event","credit risk","credit_risk","y"}
+ normalized={str(c).strip().lower().replace("-","_") for c in target_options}
+ for idx,col in enumerate(target_options):
+  if str(col).strip().lower().replace("-","_") in priority_names:
+   target_default=idx
+   break
+ else:
+  for idx in range(len(target_options)-1,-1,-1):
+   kind=type_of_target(raw[target_options[idx]].dropna())
+   if kind in ("binary","multiclass"):
+    target_default=idx
+    break
+ target=st.selectbox("Target column",target_options,index=target_default,key="prep_target")
  target_kind=type_of_target(raw[target].dropna())
  target_classes=int(raw[target].nunique(dropna=True))
  if target_kind in ("binary","multiclass"):
