@@ -11,6 +11,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, StandardScaler
+from sklearn.utils.multiclass import type_of_target
 
 
 def prepare_tabular_data(
@@ -51,6 +52,23 @@ def prepare_tabular_data(
 
     X = work.drop(columns=[target])
     y = work[target]
+
+    # Phase 1 uses RandomForestClassifier + SHAP/LIME classification metrics.
+    # Reject continuous targets here so the model-backed pages cannot fail later
+    # with scikit-learn's less helpful "Unknown label type: continuous" error.
+    target_kind = type_of_target(y)
+    if target_kind not in ("binary", "multiclass"):
+        if target_kind == "continuous":
+            raise ValueError(
+                f"Target '{target}' contains continuous numeric values. "
+                "Phase 1 expects a classification target (for example 0/1). "
+                "Select the actual class/label column, such as DEATH_EVENT or Credit Risk."
+            )
+        raise ValueError(
+            f"Target '{target}' is not a supported classification target "
+            f"(detected as {target_kind}). Select a binary or multiclass label column."
+        )
+
     if X.shape[1] == 0:
         raise ValueError("At least one feature column is required.")
 
@@ -105,6 +123,9 @@ def prepare_tabular_data(
         "output_feature_count": len(names),
         "output_features": names,
         "target": target,
+        "target_type": target_kind,
+        "target_classes": [str(v) for v in sorted(y.dropna().unique(), key=lambda v: str(v))],
+        "target_class_count": int(y.nunique(dropna=True)),
         "scaling": scaling,
         "numeric_imputation": missing_numeric,
         "categorical_imputation": missing_categorical,
